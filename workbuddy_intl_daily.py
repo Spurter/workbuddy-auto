@@ -550,8 +550,11 @@ def web_task_conversation_session(token, uid, prompt, metadata=None):
         return False, note, {}, ""
     last_error = ""
     for model in model_chain():
+        # 2026-11-24 补丁：上游脚本这里只发 user 消息，接口要求首条必须是
+        # system（否则 HTTP 400 code=11128），照保活对话的做法先补一条 system。
         body = {
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [{"role": "system", "content": "You are a helpful assistant."},
+                         {"role": "user", "content": prompt}],
             "model": model,
             "stream": True,
             "conversationId": conversation_id,
