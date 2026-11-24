@@ -71,7 +71,7 @@ Actions → WorkBuddy Daily Checkin → Run workflow → 手动跑一次。
 首次手动运行 2026-11-13 08:21 成功：接了任务「分享一个技能给好友」（进度开始计）、Buddy 派去咖啡馆，
 能量 8、成长中心连签 3 天，本次 0 积分、无失败、无推送（空跑不推是对的）。
 
-## 每天对话一次（待上传验证，2026-11-24）
+## 每天对话一次（已上线，2026-11-24）
 
 `chat.py` + `chat.yml`，每天 09:05（北京）调一次中国版聊天接口问一个简单问题
 （每天换一个，1+1、星期几这种），只为保住成长中心的「活跃登录」——光签到 +100
@@ -81,14 +81,32 @@ Actions → WorkBuddy Daily Checkin → Run workflow → 手动跑一次。
 接口是 `POST https://www.codebuddy.cn/v2/chat/completions`，stream=true，
 第一条消息必须是 system，另需三个 fresh-UUID 头
 （X-Conversation-ID / X-Conversation-Request-ID / X-Conversation-Message-ID）。
-成功不推送，只在出错时推。待验证：国际版上接口聊天不认（见下），
-中国版是否认接口聊天，看跑起来后第二天的活跃日历再定论。
+成功不推送，只在出错时推。手动运行 #1 于 2026-11-24 11:48 成功：问“太阳从哪边升起？”、credit=0。
+待验证：中国版是否认接口聊天来算活跃登录，看 2026-11-25 的活跃日历再定论。
 
-## 国际版（workbuddy.ai）—— 已探过，跑不了这套
+## 国际版（workbuddy.ai）—— 已上线每日活跃，2026-11-24
 
-中国版和国际版账号不互通，token 也不通用。本仓库的脚本只针对中国版（`www.codebuddy.cn`）。
+中国版和国际版账号不互通，token 也不通用。本仓库中国版脚本只针对 `www.codebuddy.cn`；
+国际版用单独的 `workbuddy_intl_daily.py` + `intl.yml`（每天 09:15 北京时间），
+Secret 是 `WORKBUDDY_INTL_TOKENS`，格式必须是四段 `备注|token|uid|refresh_token`
+（token 约 365 天有效，带 refresh_token 可自动续期；三段会把 uid 当 token 用，直接 401）。
 
-2026-11-13 / 11-14 实测结论（账号昵称 su su）：
+脚本来源：L0NE-6/WorkBuddy-Daily（MIT）的 `workbuddy_intl_daily.py`，
+本地改了一处：网页对话前补一条 system 消息（上游接口要求首条必须是 system，
+否则 HTTP 400 code=11128）。
+
+2026-11-24 手动运行 #3（12:11–12:13）结果：
+
+- **每日活跃已通**：活跃上报成功，连登 1 天；保活对话（deepseek-v4.1-flash）成功；
+  网页会话已创建。国际版没有每日 +100 签到活动（探测显示“活动已关闭”），
+  连登靠活跃上报 + 网页会话点亮。
+- **5 个新手任务**：4 个的动作都真实执行并上报了事件（对话 6 条、装技能 minimax-pdf 7 条、
+  召唤专家“品牌短片”9 条、用模板 Slides Creation 4 条），但服务端状态回读仍是 available，
+  脚本不冒领、不 claim。国际版分数是隔夜结算的（11-14 的 4 分就是第二天才出现的），
+  看 2026-11-25 状态翻没翻；翻了下次运行会自动 claim。
+- **链接微信**：脚本不伪造，需在客户端手动绑定。
+
+更早的探查结论（2026-11-13 / 11-14，账号昵称 su su）供参考：
 
 - **签到没有**：国际版签到接口两个地址都是 404，没有每日 +100 那个活动。
 - **成长中心接口是通的**（tasks / streak / redeem / lottery / quota / energy / travel 全是 200），
@@ -109,8 +127,6 @@ Actions → WorkBuddy Daily Checkin → Run workflow → 手动跑一次。
   接口上代做不了；而且任务里没写奖励数额。
 - 连签奖励本身是有的（7 天档 +2 能量 +1 补登卡 +1 抽奖，14 天 +50 积分，28 天 +150 积分），
   但前提是连续 7 天每天都真的用，不是登一下就行。
-- 国际版 token 有效期约 365 天（中国版只有 28 天），但上面这些原因，现在做国际版自动化没有收益，
-  所以没建国际版工作流。等国际版号真的用起来、连签快到 7 天时再说。
 
 ## 风险
 
