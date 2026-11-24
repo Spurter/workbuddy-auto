@@ -1,0 +1,86 @@
+name: WorkBuddy Daily Chat
+
+# 中国版成长中心的「活跃登录」需要每天真的用一次（光签到不够），
+# 所以每天用免费模型 quick-answer（配置里 credits x0.00，实测 0 积分）问一个简单问题。
+# 国际版上已验证：接口聊天当天不计分、分数隔夜结算；中国版是否认接口聊天，
+# 待跑起来后看第二天的活跃日历再定论。
+# 免费个人账号下私有仓库的 schedule 不会触发，本仓库必须是 public，见 checkin.yml 头部注释。
+
+on:
+  schedule:
+    # GitHub Actions 的 cron 使用 UTC，北京时间 = UTC + 8
+    # 下面这个时点对应北京时间 09:05，每天一次
+    - cron: '5 1 * * *'
+  workflow_dispatch:
+    inputs:
+      force_notify:
+        description: '强制推送一条通知（用于验证 SERVERCHAN_KEY 配置是否正确）'
+        type: boolean
+        default: false
+
+# contents: write 供「每日运行戳」步骤提交使用
+permissions:
+  contents: write
+
+concurrency:
+  group: workbuddy-chat
+  cancel-in-progress: false
+
+jobs:
+  chat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Run WorkBuddy daily chat
+        env:
+          WB_TOKEN: ${{ secrets.WB_TOKEN }}
+          WB_DOMAIN: www.codebuddy.cn
+          NOTIFY_CHANNEL: serverchan
+          SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
+          # 推送级别：action = 只在出错时推（默认）；成功每天一次不值得推
+          PUSH_LEVEL: action
+          FORCE_NOTIFY: ${{ github.event.inputs.force_notify }}
+        id: run_chat
+        run: |
+          python chat.py > "$RUNNER_TEMP/wb-chat.log" 2>&1 || rc=$?
+          cat "$RUNNER_TEMP/wb-chat.log"
+          ACTION="$(sed -n 's/.*"action": *"\([^"]*\)".*/\1/p' "$RUNNER_TEMP/wb-chat.log" | head -1)"
+          echo "action=${ACTION:-unknown}" >> "$GITHUB_OUTPUT"
+          exit ${rc:-0}
+
+      # 每日「运行戳」：与 checkin.yml 同款账本，证明今天确实跑过。
+      - name: Daily run stamp (event + action ledger)
+        if: always()
+        continue-on-error: true
+        env:
+          TZ: Asia/Shanghai
+          ACTION: ${{ steps.run_chat.outputs.action }}
+        run: |
+          set -e
+          mkdir -p .keepalive
+          STAMP=".keepalive/last-run-chat.txt"
+          TODAY="$(date +%Y-%m-%d)"
+          if [ -f "$STAMP" ] && [ "$(cut -d' ' -f1 "$STAMP")" = "$TODAY" ]; then
+            case "${ACTION}" in
+              chatted)
+                if grep -q "action=${ACTION}" "$STAMP"; then
+                  echo "already recorded action=${ACTION} today:"; cat "$STAMP"; exit 0
+                fi
+                ;;
+              *)
+                echo "no new meaningful action (action=${ACTION}); keep:"; cat "$STAMP"; exit 0
+                ;;
+            esac
+          fi
+          echo "$(date '+%Y-%m-%d %H:%M:%S %z') chat event=${GITHUB_EVENT_NAME} action=${ACTION:-unknown}" > "$STAMP"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$STAMP"
+          git commit -m "chore: daily run stamp ${TODAY} (chat)"
+          git push origin HEAD:main
